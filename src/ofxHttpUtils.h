@@ -25,41 +25,13 @@
 #include "ofxHttpTypes.h"
 #include "ofEvents.h"
 
+#include "ofxHttpResponseEvent.h"
+#include "ofxJSONElement.h"
+
 
 class ofxHttpListener;
 class ofxHttpEventManager;
 
-struct ofxHttpResponse{
-	ofxHttpResponse(Poco::Net::HTTPResponse& pocoResponse, std::istream &bodyStream, string turl, bool binary=false){
-		status=pocoResponse.getStatus();
-		try{
-			timestamp=pocoResponse.getDate();
-		}catch(Poco::Exception & exc){
-
-		}
-		reasonForStatus=pocoResponse.getReasonForStatus(pocoResponse.getStatus());
-		contentType = pocoResponse.getContentType();
-		responseBody.set(bodyStream);
-
-        url = turl;
-        pocoResponse.getCookies(cookies);
-	}
-
-	ofxHttpResponse(){}
-
-	string getURLFilename(){
-		return url.substr(url.rfind('/')+1);
-	}
-
-	int status; 				// return code for the response ie: 200 = OK
-	string reasonForStatus;		// text explaining the status
-	ofBuffer responseBody;		// the actual response
-	string contentType;			// the mime type of the response
-	Poco::Timestamp timestamp;		// time of the response
-	string url;
-	vector<Poco::Net::HTTPCookie> cookies;
-	string location;
-};
 
 class ofxHttpUtils : public ofThread{
 
@@ -69,15 +41,12 @@ class ofxHttpUtils : public ofThread{
 		~ofxHttpUtils();
 		//-------------------------------
 		// non blocking functions
-
-		void addForm(ofxHttpForm form);
-		void addUrl(string url);
+ 
+        void addRequest(ofxHTTPJsonRequest req); 
 
 		//-------------------------------
-		// blocking functions
-		ofxHttpResponse submitForm(ofxHttpForm form);
-		ofxHttpResponse getUrl(string url);
-		ofxHttpResponse postData(string url, const ofBuffer & data, string contentType="");
+		// blocking functions 
+		ofxHttpResponse getUrl(ofxHTTPJsonRequest req);
 
         int getQueueLength();
         void clearQueue();
@@ -105,19 +74,41 @@ class ofxHttpUtils : public ofThread{
 
 		void start();
         void stop();
-
+    
+        ofxHttpResponseEvent getResponse(){
+            newData = false;
+//            if (lock()){
+                if(!responses.empty()){
+                    response = responses.front();
+                    responses.pop();
+                    newData = true;
+                };
+//                unlock();
+//            }
+            if (newData){
+                return response;
+            }
+            else
+            {
+                throw 0;
+            };
+        }; 
+    
+        ofxHttpResponseEvent response;
+        queue<ofxHttpResponseEvent, list<ofxHttpResponseEvent> > responses;
+    
     protected:
-
+        bool newData;
 		bool verbose;
         int timeoutSeconds;
         bool sendCookies;
 
 		//--------------------------------
 		// http utils
-		string generateUrl(ofxHttpForm & form);
-		ofxHttpResponse doPostForm(ofxHttpForm & form);
+        string generateRequestUrl(ofxHTTPJsonRequest & req); 
+        ofxHttpResponse doPostRequest(ofxHTTPJsonRequest & req);
 
-		std::queue<ofxHttpForm> forms;
+        std::queue<ofxHTTPJsonRequest> requests;
 		vector<Poco::Net::HTTPCookie> cookies;
 		Poco::Net::HTTPBasicCredentials auth;
 		Poco::Condition condition;
